@@ -1,0 +1,440 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    author: "Janvi Patel"
+    df_print: paged
+    toc: yes
+    toc_depth: '3'
+  html_notebook:
+    df_print: paged
+    highlight: tango
+    self_contained: yes
+    theme: paper
+    toc: yes
+    toc_depth: 3
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+---
+
+#packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+
+format_table <- function(name){
+  kable(name) %>%
+  kable_styling("striped",full_width = F) %>% 
+    row_spec(0,background = "#CC99CC")
+}
+
+
+list.of.packages <- c("caret", "BAS","ggplot2","kableExtra","readr","tidyverse")
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages)
+bind_data <- readRDS("~/bind_data.rds")
+
+library(caret)
+library(BAS)
+library(ggplot2)
+library(kableExtra)
+library(readr)
+library(tidyverse)
+```
+
+# Housing Data Summary
+
+House Pricing is the most intrinsic factor of economy, and they are of great interest for buyers and sellers. Moreover, nowadays housing price and property taxes is increasing rapidly and it is an important factor that needs to be considered, before purchasing a house because it is a long - term investment. 
+From the survey of 2007 and 2008, it was found that many people bought the house on the basis of assumptions that housing price and property price will decrease in year 2007 and considering that factor, they took the loan from the bank and invested into properties, but that was not the case and this recession impacted many financial statements of individuals. 
+Thus, the goal of the project is to build a regression model that would help to determine the factors that would lead to increase in housing price in different divisions and states.My aim is to focus on model which predict the Property Taxes on the basis of divisions, states, insurance, bathroom, kitchen and many more factors. This will give consciousness to individuals about the considerations of factors that needs to be taken before buying or selling house.
+
+# Methodology
+
+Moreover,from ACS housing data I have filtered some columns which includes State,Division, Acres,Tax, Agro Products sales, Bath, Kitchen, Rent of house,and other household utilites which will help me to find the prediction of house before buying. I had similarly done this project in Foundation of Modelling in which we need to analyze some reserach paper on the basis of some topic. So, I decided to go with the Housing data in R and apply some research methods on it. In the research paper,they had simply cleaned the data and applied linear regression model on it, but in my project I tried to do some tests on it and also performed different reltion, which can help individual in buying housing property.
+
+Therefore, I have performed different steps to identify regression model.
+1st step: Loading and filtering data
+2ndstep: Weighted mean of Monthly Rent and Insurance
+3rd step: Labelling factors for better understanding
+4th step: Performing different graphs for understanding relationship
+5th step: Applied some tests on it
+6th step: Checking AIC and Bic, to see which model fits better
+7th step: Splitting data into train and test data
+8th step: Building Linear Regression Model
+9th step: Predicting model by using test data
+10th step: Visualizing summary of model
+```{r data_load, eval=FALSE}
+fields <-  c("RT", "DIVISION","ADJHSG", "ST","WGTP",
+             "ACR","AGS","BATH","BDSP", "HOTWAT",
+             "INSP","RMSP", "SINK","STOV","TEL",
+             "TOIL","VALP","YBL", "KIT","TAXP",
+             "RNTP")
+
+
+A <- data.frame(fread
+("C:/Users/Janvi/Documents/R/Final Project/csv_hus/psam_husa.csv",
+                      header=TRUE,select = fields))
+
+B <- data.frame(fread
+("C:/Users/Janvi/Documents/R/Final Project/csv_hus/psam_husb.csv",
+                      header=TRUE,select = fields))
+
+C <- data.frame(fread
+("C:/Users/Janvi/Documents/R/Final Project/csv_hus/psam_husc.csv",
+                      header=TRUE,select = fields))
+
+D <- data.frame(fread
+("C:/Users/Janvi/Documents/R/Final Project/csv_hus/psam_husd.csv",
+                      header=TRUE,select = fields))
+
+bind_data <- rbind(A,B,C,D)
+
+bind_data <- bind_data %>% 
+  rename("RecordType" = RT,"DIVISION"= DIVISION,
+         "Adjacent Factor" = ADJHSG,"State" = ST,
+         "Housingweight" = WGTP,"HouseAcre" = ACR,
+         "SaleofAgroProduct"= AGS,"Bathtub" = BATH,
+         "Bedrooms" = BDSP,"HotWater" = HOTWAT,
+         "Insurance" = INSP,"Stove" = STOV,
+         "TelephoneService" = TEL,"Toilet" = TOIL,
+         "PropertyValue" = VALP,"HouseStructureYear" = YBL,
+         "Kitchen" = KIT,"Tax" = TAXP,"MonthlyRent" = RNTP)
+View(bind_data)
+```
+## Weighted mean and labelling factors
+
+In this section I have weighted monthy rent by adjacent factor to result it into dollars, then I have done same for the Insurance. Furthermore, I have labelled the factors of state, year built in and divisions.In the end of this chunk I have omitted the Na values and based upon that I have performed different relation of graphs.
+```{r}
+
+#Weighted monthly rent
+bind_data["RENT"]=bind_data["Adjacent Factor"]*bind_data["MonthlyRent"]/1000000
+
+###Weighted mean of Insurance
+bind_data["INSURANCE"]=bind_data["Adjacent Factor"]*bind_data["Insurance"]/1000000
+
+#Labeling factors of DIVISION
+bind_data$DIVISION <- factor(bind_data$DIVISION,
+                             levels = c(1,2,3,4,5,6,7,8,9),
+                             labels = c("New England", "Middle Atlantic",
+                                        "East North Central",
+                                        "West North Central",
+                                        "South Atlantic",
+                                        "East South Central",
+                                        "West South Central",
+                                        "Mountain","Pacific"))
+bind_data$HouseStructureYear <- factor(bind_data$HouseStructureYear,
+                             levels = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,
+                                        16,17,18,19,20,21),
+                             labels = c("1939 or earlier","1940 to 1949",
+                                        "1950 to 1959",
+                                        "1960 to 1969",
+                                        "1970 to 1979",
+                                        "1980 to 1989",
+                                        "1990 to 1999",
+                                        "2000 to 2004",
+                                        "2005","2006","2007",
+                                        "2008","2009","2010",
+                                        "2011","2012","2013",
+                                        "2014",
+                                        "2015",
+                                        "2016 ",
+                                        "2017"))
+#Labeling states
+bind_data$State <- factor(bind_data$State,
+                       levels = c(1,2,4,5,6,8,9,
+                                  10,11,12,13,15,16,17,18,
+                                  19,20,21,22,23,24,25,26,27,
+                                  28,29,30,31,32,33,34,35,36,
+                                  37,38,39,40,41,42,44,45,
+                                  46,47,48,49,50,51,53,54,
+                                  55,56,72),
+                       
+                       labels =
+                         c("AL","AK","AZ","AR","CA","CO","CT","DE",
+                           "DC","FL","GA","HI","ID","IL","IN","IA",
+                           "KS","KY","LA","ME","MD","MA","MI","MN",
+                           "MS","MO","MT","NE","NV","NH","NJ","NM",
+                           "NY","NC","ND","OH","OK","OR","PA","RI",
+                           "SC","SD","TN","TX","UT","VT","VA","WA",
+                           "WV","WI","WY","PR"))
+##Removing NA from data
+Without_NA <- bind_data %>% select(State,DIVISION,Bathtub,HotWater,Bedrooms,RMSP,SINK,Stove,Toilet,
+       HouseStructureYear,Kitchen,RENT) %>% group_by(RENT) %>% na.omit() 
+head(Without_NA)
+```
+## Plotting Divisions by 2017 year wise
+
+From the below graph we can see that number of houses built in South Atlantic are around 400 in year 2017 and least were built in New England, so the consumption of lands in New England is less, so we can predict that, rent in that division would be less. Moreover, when we tried that relation with omitted NA values then west south central shows highest built houses in year 2017, which is wrong prediction and thus by omitting NA can change a lot of result.
+
+```{r}
+#Analysing Divisions Rent in 2017 year
+year_division_bind <- bind_data %>%
+  select(DIVISION,Bathtub,RMSP,HouseStructureYear,RENT) %>%
+  filter(HouseStructureYear == 2017) %>% 
+  group_by(DIVISION) %>% 
+  summarise(Count=n())
+year_division_bind
+
+#plot 
+ggplot(year_division_bind)+
+  geom_col(mapping =aes(x= DIVISION,y= Count,fill=DIVISION))+
+  ggtitle("Number of houses built in different divisions in year 2017")+
+  xlab("DIVISIONS")+ylab("Number of houses built")+ theme_bw()+
+  theme(plot.title= element_text(color="#0033FF",hjust = 0.5),
+        axis.text.x = element_text(angle = 90),
+        legend.position= "bottom")
+
+#Analysing Divisions Rent in 2017 year by omitting NA
+year_division <- Without_NA%>%
+  select(DIVISION,Bathtub,RMSP,HouseStructureYear,RENT) %>%
+  filter(HouseStructureYear == 2017) %>% 
+  group_by(DIVISION) %>% 
+  summarise(Count=n())
+year_division
+
+#plot 
+ggplot(year_division)+
+  geom_col(mapping =aes(x= DIVISION,y= Count,colour =  
+                          DIVISION,fill=DIVISION))+
+  ggtitle("Division wise House count built in year 2017 With omitted NA") +
+  xlab("DIVISIONS")+ylab("Number of houses built")+ theme_bw()+
+  theme(plot.title= element_text(color="#0033FF",hjust = 0.5),
+        axis.text.x = element_text(angle = 90),legend.position = 
+        "bottom")
+```
+
+## Rent vs Division in year 2017
+The below graph represents that average Rent of houses built in year 2017 were high in New England and least were in Mountain and East North Central, so investors can easily buy their houses on basis of rent.Moreover, in this graph when I tried with atual data without omitted NA value than I saw that there was no difference, so here I used data with omitted value to visualize data in better way.
+
+```{r}
+#Plotting rent ,division wise in year 2017
+rent_year <- Without_NA %>%
+select(DIVISION,Bathtub,RMSP,HouseStructureYear,RENT) %>% 
+filter(HouseStructureYear == 2017 ) %>% 
+group_by(DIVISION) %>% summarise(Avg_rent=mean(RENT))
+rent_year
+
+#Plot
+ggplot(rent_year)+
+  geom_col(aes(x= DIVISION,y= Avg_rent,colour = DIVISION,fill=Avg_rent))+
+  ggtitle("Rent of houses built in different divisions in year 2017")+
+  xlab("DIVISIONS")+ylab("Rent of houses in year 2017 ")+
+  theme_bw()+
+  theme(plot.title= element_text(color="#0033FF",hjust = 0.5),
+        axis.text.x = element_text(angle = 90),
+        legend.position = "bottom")
+ 
+```
+## Total Rent in different states
+
+From the below graph we can see that Hawaii(HW) of United states consist highest average Rent in comaprison to other states, thus this graph helps buyers to predict that they should not invest in hawaii if their financial statement is quite low, rather than that they should invest their income in west virgina and Arkansas.
+
+```{r}
+#Total rent in different states
+rent_rooms <- Without_NA %>%
+  select(State,RMSP,HouseStructureYear,RENT)%>% 
+  group_by(State) %>% summarise(Avg_Rent= mean(RENT))
+rent_rooms
+
+#Plot
+ggplot(rent_rooms)+
+  geom_col(mapping =aes(x= State,y=Avg_Rent,colour = State,fill=State))+
+  ggtitle("Total Rent In Different States")+
+  xlab("States")+ylab("Total Rent Of Houses ")+theme_bw()+
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+## Houses built in different years
+
+From the below graph, we can say that the ratio of houses built in early years were high compare to 2017, so we can say that houses built in recent years are less.
+
+```{r}
+YR_division <- Without_NA%>%
+  select(RENT,DIVISION,HouseStructureYear)
+YR_division
+
+#plot
+options(scipen = 999)
+ggplot(YR_division)+geom_bar(mapping =aes(x= DIVISION ,colour =
+  DIVISION,fill=DIVISION))+ facet_wrap(~HouseStructureYear)+
+  ggtitle("Number of houses built in different divisions")+
+  xlab("DIVISIONS")+ylab("Number of houses built")+theme_bw()+
+  theme(plot.title= element_text(color="#0033FF",hjust = 0.5),
+        axis.text.x = element_text(angle = 90))
+```
+## Tax in different divisions
+Here from below graph we can see that, tax in South Atlantic is highest and lowest in New England.
+
+So, from overall graphs we can say that it is beneficial to built or rent a house in New England, as it contains lowest price by considering taxes and rent factors.
+
+```{r}
+tax_division <- bind_data %>%
+  select(RENT,DIVISION,HouseStructureYear,Tax)
+
+tax_division
+
+#plot 
+options(scipen = 999)
+ggplot(tax_division)+geom_bar(mapping =aes(x= Tax ,colour =
+  DIVISION,fill=DIVISION))+facet_wrap(~DIVISION)+
+  ggtitle("Tax in different divisions")+
+  xlab("DIVISIONS")+ylab("Taxes")+theme_bw()+
+  theme(plot.title= element_text(color="#0033FF",hjust = 0.5),
+        axis.text.x = element_text(angle = 90),legend.position = 
+        "bottom")
+```
+## Sale of Agriculture product in different division
+
+Below graph depicts that East North Central has the highest tax on sale of agriculture products, so if any one wants to do business of agriculture products, they can easily depict from this graph information from where they can get benefit.Moreover, 300000 tax need to pay yearly by East North central which is costly for many individuals.
+
+```{r}
+AGS_division <- bind_data %>%
+  select(SaleofAgroProduct,DIVISION,Tax) %>% group_by(Tax)
+
+AGS_division
+
+#plot 
+ggplot(AGS_division)+
+  geom_col(aes(x=DIVISION,y=SaleofAgroProduct,fill=DIVISION))+
+  ggtitle("Sale of Agriculture products in different divisions")+
+  xlab("DIVISIONS")+ylab("SaleofAgroProduct")+
+  theme(axis.text.x = element_text(angle = 90),legend.position = "bottom")+
+  theme_bw()
+```
+
+## Performing Various test for testing P value
+
+From the below performed test we can depict that P value will remain below 0.05, which states that there is significance difference between them, thus it rejects null hypothesis and states that difference of mean of Sale of agro products and tax is not equal to 0 and thus we accept alternative hypothesis.
+
+```{r}
+(Variance_test <- var.test(bind_data$SaleofAgroProduct,bind_data$Tax))
+
+(Variance_test <- var.test(bind_data$HouseAcre,bind_data$Tax))
+
+
+(t.test(bind_data$SaleofAgroProduct,bind_data$Tax,data=bind_data))
+```
+
+#Intial model of linear regression for checking AIC and BIC 
+
+By checking AIC and BIC we can say that int_model fits best as it has lowest AIC value. From the below image we can say that, the black colour in image means it has not included few variables in that area and the coloured area represents that they are related to log probablity.The log posterior probablity are scaled so 0 represents to lowest probablity from other models.
+
+```{r}
+#Intial model of linear regression
+int_model <- lm(Tax ~ State+DIVISION+ HouseAcre+ SaleofAgroProduct+ 
+                Bathtub+ HotWater+ Bedrooms+ RMSP+ SINK+ Stove+ Toilet+
+                HouseStructureYear+ Kitchen, data = bind_data)
+summary(int_model)
+
+int_model1 <- lm(Tax ~ Bathtub+HotWater+Bedrooms+RMSP+
+                       SINK+Stove+Toilet+HouseStructureYear+
+                       Kitchen,data = bind_data)
+
+# Checking which one is better AIC or BIC,Lower the value, 
+#better the model fits 
+
+(aic_model <- AIC(int_model,k=2))
+(aic_model <- AIC(int_model1,k=2))
+(bic_model <- BIC(int_model))
+(bic_model <- BIC(int_model))
+#value of AIC model is less so AIC is considered optimal for int_model
+model_BAS <- bas.lm(log(Tax) ~ HouseAcre+SaleofAgroProduct
+                    +Bathtub+HotWater+SINK+Stove+Toilet+Kitchen, 
+                    data = bind_data, prior = "AIC", modelprior=uniform(),
+                    method = "MCMC", MCMC.iterations=500000)
+summary(model_BAS)
+image(model_BAS, rotate = F)
+```
+
+## Splitting Train and Test data
+
+I am making train data with 75% of train data and rest 25% are test data.
+
+```{r}
+set.seed(99)
+split <- sample(seq_len(nrow(bind_data)), size = floor(0.75 * nrow(bind_data)))
+train <- bind_data[split, ] 
+test <- bind_data[-split, ]
+```
+
+## Building Linear Regression Model
+
+I am predicting tax by considering different factors such as state, division, bathtub, sale of agro product and etc, by taking train data. The summary description is explained after result of summary model.
+```{r}
+model2 <- lm(Tax ~ State+DIVISION+HouseAcre+SaleofAgroProduct+
+            Bedrooms+RMSP+HouseStructureYear+SINK+Bathtub+
+            Kitchen+INSURANCE, data=train)
+
+(summary(model2))
+```
+
+By using train data we can see that accuracy of our model got increased.Moeover, below are some discriptions of summary of model.
+
+Residual Standard Error : It is the average amount that response will deviate from true regression line. In our case actual tax can deviate from true regression line by approximately 13.24.The tax is -12.98 and residual error is 13.24, so our percentage error is 0.26%.
+
+Multiple R-squared : R - squared represents how our model fits the actual data.In our case, the variance is 50% so we can say that some data points will fall near regression and other 50% of data points will be away from regression line. Though we cannot predict exactly that our model will fit our data, however in our case we consider that with 50% of variance we can get predicted model with better accuracy.
+
+Adjusted R- squared : It represents that, as we add on variables into the model, the model gets better and better. 
+
+F - statistic : In our case F - statistic value is 9656 is higher than 78, so it suggest that there is relation between predictor and response variable.
+
+
+```{r}
+##Predicting on test data
+
+pred <- predict(model2, newdata=test)
+
+(combine<-data.frame(cbind(test$Tax, pred)))
+
+colnames(combine)<-c("Actual", "Pred")   # giving column names
+
+(correlation<-cor.test(combine$Actual,combine$Pred))  #correlation
+```
+The correlation between Actual and predicted variable is 71%, so it depicts that there is a good relationship between response and predicted variable.Moreover, P - value is less than 0.05 so we reject the Null hypothsesis and we reject that there is relation between tax and other factors. Moreover,For instance, from the combined data frame we can say that on value of actual tax is 5 and predicted tax we got is 11.99.
+
+## Plot linear model
+```{r}
+plot(model2)
+```
+Explanation:
+Residual vs Fitted graph : From the graph we can see that, as red line shows close relation with dashed line in graph, that means it holds reasonably linearity and also there are some outliners which can affect the model.
+
+Normal Q-Q plot : In this graph, we can see that points fits the centre line well and also there are less ouliers which depicts that Q-Q plot is normally distributed.
+
+Scale location: This graph is used to indicate whether spread of points falls near predicted range or not.So, in our case the residuals shows relation in V shape which means that as red line increases residuals comes near it and as it starts decreasing the points go away from red line.
+
+Residuals vs Leverage: This plot helps us to find influential cases.If the point exceeds from cooks distance that is, from dotted line than it shows that there is high leverage or potential for influencing our model if we exclude that point.In our graph, that is not the case, so we can say that there will be no high influence if we exclude outliers point.
+
+# Conclusion:
+My main aim was to identify price of house on the basis different utilites, but by performing and analysing some codes I realized that accuracy for that model is so less, in which we cannot predict the actual result. So, to overcome this problem I took linear regression model of tax and other factors and measured the tax on different products. By performing that model I came up with 50% accuracy which was not quite enough for me but as by considering other model with less accuracy, I am quite satisfied with tax linear model.Thus, by analysing model I am somewhat confident with my tax prediction model with 50% accuracy. I dont Know why I am getting less accuracy but this is what I tried and what I got by performing different modelling analysis.I also tried to generate maps on basis of states and division but I could not approach to that level, so I mainly focused on ggplots and plots of linear models.
+
+# Appendix
+
+## Exra code for variable importance and RMSE check
+```{r}
+install.packages("Metrics")
+library(Metrics)
+varImp(model2, scale=FALSE)
+rmse(combine$Actual, combine$Pred)
+```
+ I was trying to do linear regression of rent and other factors which can affect the overall price of house but because of less accuracy, I tried to make regression of tax and other factors, from which individuals can predict house on basis of tax in differet divisions, states and other utilities. Below are some code which I tried in making linear regression of Rent including other utilites factors.
+
+```{r}
+rent_model <- lm(RENT ~ State+DIVISION+ HouseAcre+ SaleofAgroProduct+ 
+                Bathtub+ HotWater+ Bedrooms+ RMSP+ SINK+ Stove+ Toilet+
+                HouseStructureYear+ Kitchen, data = bind_data)
+summary(rent_model)
+```
+
+```{r}
+p2 <- predict(rent_model, newdata=test)
+
+(combine<-data.frame(cbind(test$RENT, p2)))
+
+colnames(combine)<-c("Actual", "Pred")   # giving column names
+
+(correlation<-cor.test(combine$Actual,combine$Pred))
+```
+
+The accuracy of Rent model is only 24% and from prediction we can say that by including other utilities such as Bathtub, kitchen, agro products, acres, the rent would be 105.40 whilst our predicted rent is 512, which shows a great difference between actual and predicted value. Thus, lower the accuracy, more worst our prediction would be.
